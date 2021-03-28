@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#include "ptentry.h"
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -532,3 +534,88 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+// USER ADDED
+int
+mencrypt(char *virtual_addr, int len)
+{
+  pte_t* pgdir = myproc()->pgdir;
+
+  // Start of ERROR CHECKS
+
+  // Check if len is zero
+  if(len == 0)
+    return 0;
+
+  // Check if len is negative
+  if(len < 0)
+    return -1;
+
+  // TODO: Check if pages within range are already encrypted
+  // Check PTE_E bit
+  // #define PTE_E           0x006   // Encrypted
+
+
+  // TODO: Check if calling proc has access to this range
+  // Use uva2ka()?
+  // uva2ka(pde_t *pgdir, char *uva)
+  if (uva2ka(pgdir, virtual_addr) == 0) {
+    return -1;
+  }
+
+  // TODO: Check if virtual addr is valid
+  // Check if virtual_addr is within range
+  if (uva2ka(pgdir, virtual_addr) == 0) {
+    return -1;
+  }
+
+  // TODO: Check bound of len
+  // CANNOT exceed page table length
+  if (uva2ka(pgdir, (virtual_addr + len)) == 0) {
+    return -1;
+  }
+
+
+  // End of ERROR CHECKS
+
+
+
+
+  // TODO: Encrypt all pages within range
+  // XOR with all 1
+  // Change PTE_P to 0
+  // Change PTE_E to 1
+  
+
+  return 0;
+};
+
+int
+getpgtable(struct pt_entry* entries, int num)
+{
+  // pte_t* pgdir = myproc()->pgdir;
+
+  // TODO
+  
+  return 0;
+};
+
+int
+dump_rawphymem(uint physical_addr, char * buffer)
+{
+  // pte_t* pgdir = myproc()->pgdir;
+
+  // TODO
+  // Use copyout()
+  
+  // copyout(pgdir, physical_addr, void *p, uint len);
+
+  return 0;
+};
+
+
+
+// IMPORTANT METHODS
+// walkpgdir(pde_t *pgdir, const void *va, int alloc)
+// uva2ka(pde_t *pgdir, char *uva)
+// copyout(pde_t *pgdir, uint va, void *p, uint len)
