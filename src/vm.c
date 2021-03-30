@@ -393,3 +393,100 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 //PAGEBREAK!
 // Blank page.
 
+
+// USER ADDED
+int
+mencrypt(char *virtual_addr, int len)
+{
+  // pte_t* pgdir = myproc()->pgdir;    // pgdir is an array of pages, 
+  pde_t* pgdir = myproc()->pgdir;       // pagetable entry      //array of pointers to pagetables
+
+  // Start of ERROR CHECKS
+
+  // Check if len is zero
+  if(len == 0)
+    return 0;
+
+  // Check if len is negative
+  if(len < 0)
+    return -1;
+
+  // TODO: Check if pages within range are already encrypted
+  // Check PTE_E bit
+  // #define PTE_E           0x006      // Encrypted
+
+  int slider = 0;
+  for (int i = 0; i < len; i++) {
+    pte_t* mypte = walkpgdir(pgdir, (void*)slider, 0);    //each pagetable in pdet
+    if (*mypte & (PTE_P == 0)) {
+      return -1;
+    }
+  }
+
+  slider = PGROUNDDOWN((int) virtual_addr);
+  for(int j=0; j<len; j++){                               //iterating through 1 pagetable containing many ptes
+  pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);     //each pagetable in a directory
+
+    if (*mypte & (PTE_E != 0)) {                          //encryption bit 1 if encrypted and 0 if not
+      slider += PGSIZE;
+    } else {
+        
+      for (int i=0; i < 4096; i++){                       //page size 4k, for encrypting content of 1 pte whose size is 4k
+        *(uint*)((void*)(slider + i)) = *(uint*)((void*)(slider + i)) ^ 0xFF;
+      }
+
+      *mypte = *mypte | PTE_E;//reset E bit to 1
+      *mypte = *mypte & (~PTE_P);//reset P bit to 0
+      slider += PGSIZE;
+    }
+  }
+	
+  // Check if calling proc has access to this range
+  // len is number of pages I want encrypt
+  if (uva2ka(pgdir, virtual_addr) == 0) { 
+    return -1;
+  }
+
+  // Check if virtual_addr is within range
+  if (uva2ka(pgdir, virtual_addr) == 0) {
+    return -1;
+  }
+
+  // CANNOT exceed page table length
+  if (uva2ka(pgdir, (virtual_addr + len)) == 0) {
+    return -1;
+  }
+
+
+  // End of ERROR CHECKS
+
+  // TODO: Encrypt all pages within range
+  // XOR with all 1
+  // Change PTE_P to 0
+  // Change PTE_E to 1
+  
+
+  return 0;
+};
+
+int
+decrypt(char *virtual_addr){
+	pde_t* pgdir = myproc()->pgdir;                       // pagetable entry -> array of pointers to pagetables
+  int slider = 0;
+	pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);   //each pagetable in pdet
+
+  if (*mypte & (PTE_E != 0)) {                           //encryption bit 1 if encrypted and 0 if not
+    slider += PGSIZE;
+  } else {
+
+    for (int i=0; i < 4096; i++){                     //page size 4k, for encrypting content of 1 pte whose size is 4k
+      *(uint*)((void*)(slider + i)) = *(uint*)((void*)(slider + i)) ^ 0xFF;
+    }
+    *mypte = *mypte & PTE_E;                          //reset E bit to 0
+    *mypte = *mypte | (~PTE_P);                       //reset P bitto 1
+    slider += PGSIZE;
+  }
+
+  // End of ERROR CHECKS
+  return 0;
+}

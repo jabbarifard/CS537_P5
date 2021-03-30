@@ -123,7 +123,10 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 
+// vm.c
 int             mencrypt(char *, int);
+int             decrypt(char *);
+
 int             getpgtable(struct pt_entry*, int);
 int             dump_rawphymem(uint, char *);
 
