@@ -515,3 +515,59 @@ decrypt(char *virtual_addr){
   // End of ERROR CHECKS
   return 0;
 }
+
+
+int
+getpgtable(struct pt_entry *entries, int num)
+{
+  pde_t* pgdir = myproc()->pgdir;
+  uint   size  = myproc()->sz;
+
+  // Get topmost page
+  int slider = PGROUNDDOWN((int) size);
+
+  // TODO
+  // Fill up a pt_entry array of num entries 
+  // Starting from the highest PTE_E first
+  int i = 0;
+  for(i = 0; i < num; i++){
+    // Copy information from current page
+    pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);
+
+    (entries + i)->pdx       = PDX(slider);
+    (entries + i)->ptx       = PTX(slider);
+    (entries + i)->ppage     = PTE_ADDR(*mypte);
+    (entries + i)->present   = *mypte & PTE_P;
+    (entries + i)->writable  = *mypte & PTE_W;
+    (entries + i)->encrypted = *mypte & PTE_E;
+    
+    // Go to next highest page
+    slider -= PGSIZE;
+  }
+
+  return 0;
+};
+
+int
+dump_rawphymem(uint physical_addr, char * buffer)
+{
+  // TODO
+  // Use copyout() to dump mem
+  int addr = PGROUNDDOWN((int) physical_addr);
+  pde_t* pgdir = myproc()->pgdir;
+  // CLARIFY
+  // copyout copies from p to va -> we want to copy 1 PAGE from phy_add to buffer
+  // pgdir = myproc()->pgdir
+  // va    = buffer?
+  // p     = (roudned down) addr?
+  // len   = PGSIZE (since 1 page is copied)
+  return copyout(pgdir, (uint) buffer, (void *) addr, PGSIZE);
+
+  // copyout(pde_t *pgdir, uint va, void *p, uint len)
+};
+
+
+// IMPORTANT METHODS
+// walkpgdir(pde_t *pgdir, const void *va, int alloc)
+// uva2ka(pde_t *pgdir, char *uva)
+// copyout(pde_t *pgdir, uint va, void *p, uint len)

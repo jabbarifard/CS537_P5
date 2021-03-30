@@ -535,32 +535,3 @@ procdump(void)
   }
 }
 
-
-int
-getpgtable(struct pt_entry* entries, int num)
-{
-  // pte_t* pgdir = myproc()->pgdir;
-
-  // TODO
-  
-  return 0;
-};
-
-int
-dump_rawphymem(uint physical_addr, char * buffer)
-{
-  // pte_t* pgdir = myproc()->pgdir;
-
-  // TODO
-  // Use copyout()
-  
-  // copyout(pgdir, physical_addr, void *p, uint len);
-
-  return 0;
-};
-
-
-// IMPORTANT METHODS
-// walkpgdir(pde_t *pgdir, const void *va, int alloc)
-// uva2ka(pde_t *pgdir, char *uva)
-// copyout(pde_t *pgdir, uint va, void *p, uint len)
