@@ -46,6 +46,12 @@ trap(struct trapframe *tf)
     return;
   }
 
+  if (tf->trapno == T_PGFLT) {//rcr2() trigers the trap by page fault returns address that triggers pf
+	  if (decrypt(rcr2()) == 0){// 0=success decryption
+		  return;//otherwise continue to switch
+	  }
+  }
+
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
