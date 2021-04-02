@@ -69,7 +69,7 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
     if(*pte & PTE_P)
-      if(*pte & PTE_E)
+      if((*pte & PTE_E) >> 9)
         panic("remap");
     *pte = pa | perm | PTE_P;
     if(a == last)
@@ -268,7 +268,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     if(!pte)
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
     else if((*pte & PTE_P) != 0){
-      if((*pte & PTE_E) != 0){
+      if(((*pte & PTE_E) >> 9) != 0){
         pa = PTE_ADDR(*pte);
         if(pa == 0)
           panic("kfree");
@@ -331,7 +331,7 @@ copyuvm(pde_t *pgdir, uint sz)
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if((*pte & PTE_P) == 0)
-      if((*pte & PTE_E) == 0)    
+      if(((*pte & PTE_E) >> 9) == 0)    
         panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
@@ -360,7 +360,7 @@ uva2ka(pde_t *pgdir, char *uva)
   pte = walkpgdir(pgdir, uva, 0);
   // Modified to check for PTE_E    
   if((*pte & PTE_P) == 0)
-    if((*pte & PTE_E) == 0)                    
+    if(((*pte & PTE_E) >> 9) == 0)                    
       return 0;
   if((*pte & PTE_U) == 0)
     return 0;
@@ -404,15 +404,14 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 // USER ADDED
 int
 mencrypt(char *virtual_addr, int len)
-{
-  // pte_t* pgdir = myproc()->pgdir;    // pgdir is an array of pages, 
-  pde_t* pgdir = myproc()->pgdir;       // pagetable entry      //array of pointers to pagetables
-
+{  
+  
   // Start of ERROR CHECKS
-
+  // cprintf("encypting\n");
+  
   // Check if len is zero
   if(len == 0)
-    return 0;
+    return 0;  
 
   // Check if len is negative
   if(len < 0)
@@ -420,22 +419,29 @@ mencrypt(char *virtual_addr, int len)
 
   // Check PTE_E bit
   // #define PTE_E           0x006      // Encrypted
+    
+  // pte_t* pgdir = myproc()->pgdir;    // pgdir is an array of pages, 
+  pde_t* pgdir = myproc()->pgdir;       // pagetable entry      //array of pointers to pagetables
 
   int slider = PGROUNDDOWN((int) virtual_addr);
 
+  // cprintf("checks done 0\n");
+
+
   int lenCount = 0;
   for (int i = 0; i < len; i++) {
-    pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);    //each pagetable in pdet
-
-    // Check if pages within range are present
-    if ((*mypte & PTE_P) == 0) {
-      return -1;
-    }
-
+    pte_t* mypte = walkpgdir(pgdir, (void*)(slider + i * PGSIZE), 0);    //each pagetable in pdet
+  
+    // Check if pages are present
+    if((*mypte & PTE_P) == 0)
+      if(((*mypte & PTE_E) >> 9) == 0)                    
+        return -1;
+      
     // Check if pages within range are already encrypted
-    if ((*mypte & PTE_E) == 0) {
+    if (((*mypte & PTE_E) >> 9) == 1) {
       lenCount++;
     }
+
   }
 
   // Check if pages within range are already encrypted
@@ -443,40 +449,42 @@ mencrypt(char *virtual_addr, int len)
   {
     return 0;
   }
+
+  // cprintf("checks done 1\n");
   	
   // Check if calling proc has access to this range
-  // len is number of pages I want encrypt
-  if (uva2ka(pgdir, virtual_addr) == 0) { 
-    return -1;
-  }
-
   // Check if virtual_addr is within range
-  if (uva2ka(pgdir, virtual_addr) == 0) {
+  // len is number of pages I want encrypt
+  if (uva2ka(pgdir, (char*) slider) == 0) { 
     return -1;
   }
 
   // CANNOT exceed page table length
-  if (uva2ka(pgdir, (virtual_addr + len)) == 0) {
-    return -1;
-  }
+  // if (uva2ka(pgdir, (char*) (slider + len * PGSIZE)) == 0) {
+  //   return -1;
+  // }
+
+  // cprintf("checks done 2\n");
 
   // End of ERROR CHECKS
 
-  for(int j=0; j<len; j++){                               //iterating through 1 pagetable containing many ptes
+  for(int j = 0; j < len; j++){                             //iterating through 1 pagetable containing many ptes
     pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);     //each pagetable in a directory
 
-    if ((*mypte & PTE_P) == 0) {                          //encryption bit 1 if encrypted and 0 if not
-      slider += PGSIZE;
+    if ((*mypte & PTE_P) == 0) {                            //encryption bit 1 if encrypted and 0 if not
+      
     } else {
       int i;
-      for (i = 0; i < 4096; i++){                       //page size 4k, for encrypting content of 1 pte whose size is 4k
-        *(uint*)((void*)(slider + i)) = *(uint*)((void*)(slider + i)) ^ 0xFF;
+      for (i = 0; i < PGSIZE; i++){                         //page size 4k, for encrypting content of 1 pte whose size is 4k
+        *(char*)(slider + i) = *(char*)(slider + i) ^ 0xFF;
+        // cprintf("%d: encryptying\n", i);
       }
 
-      *mypte = *mypte | PTE_E;    //reset E bit to 1
-      *mypte = *mypte & (~PTE_P); //reset P bit to 0
-      slider += PGSIZE;
+      *mypte = *mypte & ~PTE_P;                           // set P bit to 0
+      *mypte = *mypte |  PTE_E;                              // set E bit to 1
     }
+    
+    slider += PGSIZE;    
   }
 
   // if((*pte & PTE_P) && (*pte & PTE_P)
@@ -496,20 +504,21 @@ decrypt(char *virtual_addr){
 	pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);    // each pagetable in pdet
 
   // Normal page fault, not encrypted
-  if (uva2ka(pgdir, virtual_addr) == 0){
+  if (uva2ka(pgdir, (char*) slider) == 0){
     return -1;
   }
   
-  // if ((*mypte & PTE_E) == 0) {
+  // if (((*mypte & PTE_E) >> 9) == 0) {
   //   return -1;
   // }
 
   // Otherwise, decrypt page
   for (int i=0; i < PGSIZE; i++){                        //page size 4k, for encrypting content of 1 pte whose size is 4k
-    *(uint*)((void*)(slider + i)) = *(uint*)((void*)(slider + i)) ^ 0xFF;
+    *(char*)(slider + i) = *(char*)(slider + i) ^ 0xFF;
   }
-  *mypte = *mypte & PTE_E;                             //reset E bit to 0
-  *mypte = *mypte | (~PTE_P);                          //reset P bitto 1
+
+  *mypte = *mypte & ~PTE_E;                              // reset E bit to 0
+  *mypte = *mypte |  PTE_P;                              // reset P bit to 1
   slider += PGSIZE;
 
   // End of ERROR CHECKS
@@ -524,28 +533,36 @@ getpgtable(struct pt_entry *entries, int num)
   uint   size  = myproc()->sz;
 
   // Get topmost page
-  int slider = PGROUNDDOWN((int) size);
+  int slider = PGROUNDDOWN((uint) size);
+
+  while (uva2ka(pgdir, (char*) slider) == 0){
+    slider -= PGSIZE;
+  }
 
   // TODO
   // Fill up a pt_entry array of num entries 
   // Starting from the highest PTE_E first
   int i = 0;
+  int valid = 0;
   for(i = 0; i < num; i++){
     // Copy information from current page
     pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);
+    if (uva2ka(pgdir, (char*) slider) != 0){
+      valid++;
+  
+      (entries + i)->pdx       = PDX(slider);
+      (entries + i)->ptx       = PTX(slider);
+      (entries + i)->ppage     = PTE_ADDR(*mypte) >> 12;
+      (entries + i)->present   = (*mypte & PTE_P) >> 0;
+      (entries + i)->writable  = (*mypte & PTE_W) >> 1;
+      (entries + i)->encrypted = (*mypte & PTE_E) >> 9;
+    }
 
-    (entries + i)->pdx       = PDX(slider);
-    (entries + i)->ptx       = PTX(slider);
-    (entries + i)->ppage     = PTE_ADDR(*mypte);
-    (entries + i)->present   = *mypte & PTE_P;
-    (entries + i)->writable  = *mypte & PTE_W;
-    (entries + i)->encrypted = *mypte & PTE_E;
-    
     // Go to next highest page
     slider -= PGSIZE;
   }
 
-  return 0;
+  return valid;
 };
 
 int
