@@ -66,12 +66,23 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   a = (char*)PGROUNDDOWN((uint)va);
   last = (char*)PGROUNDDOWN(((uint)va) + size - 1);
   for(;;){
+    // int encrypted = 0;
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_P)
-      if((*pte & PTE_E) >> 9)
+    if(*pte & PTE_P){
+      if((*pte & PTE_E) >> 9){
         panic("remap");
+      } else {
+        // encrypted = 1;
+      }
+    }
+
     *pte = pa | perm | PTE_P;
+    if(((*pte & PTE_E) >> 9) != 0)
+    {
+      *pte &= ~PTE_P;
+    }
+
     if(a == last)
       break;
     a += PGSIZE;
@@ -267,15 +278,15 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     pte = walkpgdir(pgdir, (char*)a, 0);
     if(!pte)
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-    else if((*pte & PTE_P) != 0){
-      if(((*pte & PTE_E) >> 9) != 0){
+    else if((*pte & PTE_P) != 0 || (*pte & PTE_E) != 0){
+      // if(((*pte & PTE_E) >> 9) != 1){
         pa = PTE_ADDR(*pte);
         if(pa == 0)
           panic("kfree");
         char *v = P2V(pa);
         kfree(v);
         *pte = 0;
-      }
+      // }
     }
   }
   return newsz;
@@ -408,10 +419,16 @@ mencrypt(char *virtual_addr, int len)
   
   // Start of ERROR CHECKS
   // cprintf("encypting\n");
+
+  // cprintf("len is %d\n", len);
   
   // Check if len is zero
-  if(len == 0)
-    return 0;  
+  if(len == 0){
+    // cprintf("len is 0\n");
+    return len;  
+  }
+
+  cprintf("len is not 0\n");
 
   // Check if len is negative
   if(len < 0)
@@ -480,8 +497,12 @@ mencrypt(char *virtual_addr, int len)
         // cprintf("%d: encryptying\n", i);
       }
 
-      *mypte = *mypte & ~PTE_P;                           // set P bit to 0
-      *mypte = *mypte |  PTE_E;                              // set E bit to 1
+      *mypte = *mypte & ~PTE_P;                             // set P bit to 0
+      *mypte = *mypte |  PTE_E;                             // set E bit to 1
+      
+      // Flush TLB
+      struct proc *curproc = myproc();
+      switchuvm(curproc);
     }
     
     slider += PGSIZE;    
@@ -497,20 +518,22 @@ mencrypt(char *virtual_addr, int len)
 
 int
 decrypt(char *virtual_addr){
+  // cprintf("decrypting\n");
   
   int slider = PGROUNDDOWN((int) virtual_addr);
 
 	pde_t* pgdir = myproc()->pgdir;                        // pagetable entry -> array of pointers to pagetables
-	pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);    // each pagetable in pdet
 
   // Normal page fault, not encrypted
-  if (uva2ka(pgdir, (char*) slider) == 0){
-    return -1;
-  }
-  
-  // if (((*mypte & PTE_E) >> 9) == 0) {
+  // if (uva2ka(pgdir, (char*) slider) == 0){
   //   return -1;
   // }
+  
+  pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);    // each pagetable in pdet
+  if (((*mypte & PTE_E) >> 9) == 0) {
+    // cprintf("failed to decrypt\n");
+    return -1;
+  }
 
   // Otherwise, decrypt page
   for (int i=0; i < PGSIZE; i++){                        //page size 4k, for encrypting content of 1 pte whose size is 4k
@@ -519,7 +542,10 @@ decrypt(char *virtual_addr){
 
   *mypte = *mypte & ~PTE_E;                              // reset E bit to 0
   *mypte = *mypte |  PTE_P;                              // reset P bit to 1
-  slider += PGSIZE;
+
+  // Flush TLB
+  struct proc *curproc = myproc();
+  switchuvm(curproc);
 
   // End of ERROR CHECKS
   return 0;
@@ -552,7 +578,7 @@ getpgtable(struct pt_entry *entries, int num)
   
       (entries + i)->pdx       = PDX(slider);
       (entries + i)->ptx       = PTX(slider);
-      (entries + i)->ppage     = PTE_ADDR(*mypte) >> 12;
+      (entries + i)->ppage     = (PTE_ADDR(*mypte)) >> PTXSHIFT;
       (entries + i)->present   = (*mypte & PTE_P) >> 0;
       (entries + i)->writable  = (*mypte & PTE_W) >> 1;
       (entries + i)->encrypted = (*mypte & PTE_E) >> 9;
@@ -572,15 +598,17 @@ dump_rawphymem(uint physical_addr, char * buffer)
   // Use copyout() to dump mem
   int addr = PGROUNDDOWN((int) physical_addr);
   pde_t* pgdir = myproc()->pgdir;
+
   // CLARIFY
   // copyout copies from p to va -> we want to copy 1 PAGE from phy_add to buffer
   // pgdir = myproc()->pgdir
   // va    = buffer?
   // p     = (roudned down) addr?
   // len   = PGSIZE (since 1 page is copied)
-  return copyout(pgdir, (uint) buffer, (void *) addr, PGSIZE);
-
+  // return copyout(pgdir, (uint) buffer, (void *) addr, PGSIZE);
   // copyout(pde_t *pgdir, uint va, void *p, uint len)
+
+  return copyout(pgdir, (uint) buffer, (void *) P2V(addr), PGSIZE);
 };
 
 

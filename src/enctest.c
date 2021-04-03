@@ -17,14 +17,34 @@ main(int argc, char *argv[])
 	// see what's inside stat, is it encrypted?
 	// try to access value at a
 	// you should have *a == 0xAA
-	char *ptr = sbrk(PGSIZE * 1); // Allocate one page
+	char *ptr = sbrk(PGSIZE * 3); // Allocate one page
 	// mencrypt(ptr, 1); // Encrypt 1 out of 3 pages
-	mencrypt(ptr, 1); // Encrypt 2 out of 3 pages
+	mencrypt(ptr, 0); // Encrypt 2 out of 3 pages
 	// mencrypt(ptr, 1); // Encrypt 3 out of 3 pages
-	struct pt_entry pt_entries[1];
+	struct pt_entry pt_entries[3];
 
-	getpgtable(pt_entries, 1);
-	for (int i = 0; i < 1; i++) {
+	getpgtable(pt_entries, 3);
+	for (int i = 0; i < 3; i++) {
+		printf(1, "XV6_TEST_OUTPUT Index %d: pdx: 0x%x, ptx: 0x%x, present bit: %d, writable bit: %d, encrypted: %d\n", 
+			i,
+			pt_entries[i].pdx,
+			pt_entries[i].ptx,
+			pt_entries[i].present,
+			pt_entries[i].writable,
+			pt_entries[i].encrypted
+		);
+	}
+
+	printf(1, "decrypting...\n"); 
+
+	// Trigger a decrypt
+	for (int i = 0; i < 1; i++) 
+    {
+        ptr[(i + 1) * (4096) - 1] = 0xAA;
+    }
+
+	getpgtable(pt_entries, 3);
+	for (int i = 0; i < 3; i++) {
 		printf(1, "XV6_TEST_OUTPUT Index %d: pdx: 0x%x, ptx: 0x%x, present bit: %d, writable bit: %d, encrypted: %d\n", 
 			i,
 			pt_entries[i].pdx,
