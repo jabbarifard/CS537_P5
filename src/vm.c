@@ -532,16 +532,18 @@ decrypt(char *virtual_addr){
   pte_t* mypte = walkpgdir(pgdir, (void*) slider, 0);    // each pagetable in pdet
   if (((*mypte & PTE_E) >> 9) == 0) {
     // cprintf("failed to decrypt\n");
+  //if (*mypte == 0) {
     return -1;
   }
+
+  *mypte = *mypte & ~PTE_E;                              // reset E bit to 0
+  *mypte = *mypte |  PTE_P;                              // reset P bit to 1
+
 
   // Otherwise, decrypt page
   for (int i=0; i < PGSIZE; i++){                        //page size 4k, for encrypting content of 1 pte whose size is 4k
     *(char*)(slider + i) = *(char*)(slider + i) ^ 0xFF;
   }
-
-  *mypte = *mypte & ~PTE_E;                              // reset E bit to 0
-  *mypte = *mypte |  PTE_P;                              // reset P bit to 1
 
   // Flush TLB
   struct proc *curproc = myproc();
@@ -580,8 +582,11 @@ getpgtable(struct pt_entry *entries, int num)
       (entries + i)->ptx       = PTX(slider);
       (entries + i)->ppage     = (PTE_ADDR(*mypte)) >> PTXSHIFT;
       (entries + i)->present   = (*mypte & PTE_P) >> 0;
+      //(entries + i)->present   = (*mypte & PTE_P)?1:0;
       (entries + i)->writable  = (*mypte & PTE_W) >> 1;
+      //(entries + i)->writable  = (*mypte & PTE_W)?1:0;
       (entries + i)->encrypted = (*mypte & PTE_E) >> 9;
+      //(entries + i)->encrypted = (*mypte & PTE_E)?1:0;
     }
 
     // Go to next highest page
